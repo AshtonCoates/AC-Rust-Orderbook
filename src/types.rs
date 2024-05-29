@@ -1,14 +1,23 @@
 use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 
-pub type Quantity = u32;
+pub type Quantity = usize;
 pub type OrderId = i32;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Price(pub f64);
 
 impl PartialEq for Price {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
+    }
+}
+
+impl Hash for Price {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // Convert the f64 to a format that can be hashed
+        let price_as_int = (self.0 * 100.0) as i64;
+        price_as_int.hash(state);
     }
 }
 
@@ -29,13 +38,13 @@ impl Ord for Price {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum Side {
     Buy,
     Sell,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum OrderType {
     GTC,
     FOK,
