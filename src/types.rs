@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 pub type Quantity = usize;
 pub type OrderId = i32;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Price(pub f64);
 
 impl PartialEq for Price {
@@ -38,13 +38,13 @@ impl Ord for Price {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum Side {
     Buy,
     Sell,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum OrderType {
     GTC,
     FOK,
