@@ -41,7 +41,7 @@ impl OrderBook {
         }
     }
 
-    pub fn add_order(&mut self, order: Order) {
+    pub(crate) fn add_order(&mut self, order: Order) { // public(crate) because the place_order method is the public API
         match order.side {
             Side::Buy => {
                 self.buy_orders.insert(order.id, order);
@@ -55,6 +55,16 @@ impl OrderBook {
                 self.ask_price_map.entry(order.price).or_insert(OrderQueue::new()).push(order.id);
                 self.sell_volume += order.quantity;
             }
+        }
+    }
+
+    pub fn cancel_order(&mut self, order_id: OrderId) {
+        if let Some(order) = self.buy_orders.remove(&order_id) {
+            self.bid_price_map.get_mut(&order.price).unwrap().pop();
+            self.buy_volume -= order.quantity;
+        } else if let Some(order) = self.sell_orders.remove(&order_id) {
+            self.ask_price_map.get_mut(&order.price).unwrap().pop();
+            self.sell_volume -= order.quantity;
         }
     }
 }
