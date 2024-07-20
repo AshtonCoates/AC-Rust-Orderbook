@@ -19,7 +19,7 @@ impl PartialOrd for Order {
         if self.price == other.price {
             Some(self.id.cmp(&other.id))
         } else {
-            Some(self.price.cmp(&other.price))
+            Some(self.get_heap_val().cmp(&other.get_heap_val()))
         }
     }
 }
@@ -33,6 +33,14 @@ impl Order {
             quantity: quantity,
             price: price,
             side: side,
+        }
+    }
+
+    pub fn get_heap_val(&self) -> Price {
+        if self.side == Side::Buy {
+            self.price
+        } else {
+            Price(-self.price.0)
         }
     }
 }
@@ -66,6 +74,13 @@ impl OrderQueue {
         self.0.len()
     }
 
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub(crate) fn remove_order(&mut self, order_id: OrderId) {
+        self.0.retain(|&id| id != order_id);
+    }
 }
 
 #[cfg(test)]
