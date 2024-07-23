@@ -40,30 +40,43 @@ impl OrderBook {
         }
     }
 
-    pub fn place_order(&mut self, order: Order) -> bool {
+    pub fn place_order(&mut self, order: Order) -> bool { // returns true if order successfully matched
         match order.side {
             Side::Buy => {
                 self.buy_volume += order.quantity;
                 match order.kind {
-                    OrderType::GTC => {
+                    OrderType::GTC => { // GTC orders always return true
                         if self.ask_tree.is_empty() {
                             self.add_order(order, false);
-                            return false;
                         } else if self.get_ask().unwrap() <= &order.price {
                             let ask_price = self.get_ask().unwrap().clone();
                             let sell_order = self.ask_price_map.get_mut(&ask_price).unwrap().pop().unwrap();
-                            let remaining_order = self.match_order(order, self.sell_orders.get(&sell_order).unwrap().clone());
+                            let remaining_order = self.match_order(order,
+                                self.sell_orders.get(&sell_order).unwrap().clone(),
+                                Side::Sell);
                             if let Some(order) = remaining_order {
                                 self.add_order(order, false);
                             }
                         } else {
                             self.add_order(order, false);
-                            return false;
                         }
                     }
                     OrderType::FOK => {return false;}
                     OrderType::IOC => {return false;}
-                    OrderType::Market => {return false;}
+                    OrderType::Market => {
+                        if self.ask_tree.is_empty() {
+                            return false;
+                        } else {
+                            let ask_price = self.get_ask().unwrap().clone();
+                            let sell_order = self.ask_price_map.get_mut(&ask_price).unwrap().pop().unwrap();
+                            let remaining_order = self.match_order(order,
+                                self.sell_orders.get(&sell_order).unwrap().clone(),
+                                Side::Sell);
+                            if let Some(order) = remaining_order {
+                                self.add_order(order, false);
+                            }
+                        }
+                    }
                 }
             }
             Side::Sell => {
@@ -72,22 +85,35 @@ impl OrderBook {
                     OrderType::GTC => {
                         if self.bid_tree.is_empty() {
                             self.add_order(order, false);
-                            return false;
                         } else if self.get_bid().unwrap() >= &order.price {
                             let bid_price = self.get_bid().unwrap().clone();
                             let buy_order = self.bid_price_map.get_mut(&bid_price).unwrap().pop().unwrap();
-                            let remaining_order = self.match_order(self.buy_orders.get(&buy_order).unwrap().clone(), order);
+                            let remaining_order = self.match_order(self.buy_orders.get(&buy_order).unwrap().clone(),
+                            order,
+                            Side::Buy);
                             if let Some(order) = remaining_order {
                                 self.add_order(order, false);
                             }
                         } else {
                             self.add_order(order, false);
-                            return false;
                         }
                     }
                     OrderType::FOK => {return false;}
                     OrderType::IOC => {return false;}
-                    OrderType::Market => {return false;}
+                    OrderType::Market => {
+                        if self.bid_tree.is_empty() {
+                            return false;
+                        } else {
+                            let bid_price = self.get_bid().unwrap().clone();
+                            let buy_order = self.bid_price_map.get_mut(&bid_price).unwrap().pop().unwrap();
+                            let remaining_order = self.match_order(self.buy_orders.get(&buy_order).unwrap().clone(),
+                                order,
+                                Side::Buy);
+                            if let Some(order) = remaining_order {
+                                self.add_order(order, false);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -96,10 +122,18 @@ impl OrderBook {
         return true;
     }
 
-    fn match_order(&mut self, buy_order: Order, sell_order: Order) -> Option<Order> {
+    fn match_order(&mut self, buy_order: Order, sell_order: Order, price_side: Side) -> Option<Order> {
         let quantity = std::cmp::min(buy_order.quantity, sell_order.quantity);
-        let price = buy_order.price;
-        let trade = Trade {
+        let price: Price;
+        match price_side {
+            Side::Buy => {
+                price = buy_order.price;
+            }
+            Side::Sell => {
+                price = sell_order.price;
+            }
+        }
+        let trade: Trade = Trade {
             buy_order: buy_order.clone(),
             sell_order: sell_order.clone(),
             price,
@@ -136,7 +170,7 @@ impl OrderBook {
         }
     }
 
-    // private function, place_order method is the public API
+    // private function to add a GTC order to the heap, place_order method is the public API
     fn add_order(&mut self, order: Order, test: bool) {
         match order.side {
             Side::Buy => {
@@ -220,7 +254,6 @@ impl OrderBook {
             }
         }
     }
-
 }
 
 #[cfg(test)]
@@ -337,7 +370,7 @@ mod tests {
         let order2 = Order::new(2, OrderType::GTC, 150, Price(100.0), Side::Sell);
         orderbook.add_order(order1, true);
         orderbook.add_order(order2, true);
-        orderbook.match_order(order1, order2);
+        orderbook.match_order(order1, order2, Side::Buy);
         assert_eq!(orderbook.trades.len(), 1);
         assert_eq!(orderbook.trades.get(&(1, 2)).unwrap().quantity, 100);
         assert_eq!(orderbook.buy_volume, 0);
@@ -345,11 +378,12 @@ mod tests {
         assert_eq!(orderbook.bid_tree.len(), 1); // we have not cleaned the empty bid
         assert_eq!(orderbook.ask_tree.len(), 1);
 
-        let order3 = Order::new(3, OrderType::GTC, 50, Price(100.0), Side::Buy);
+        let order3 = Order::new(3, OrderType::GTC, 50, Price(110.0), Side::Buy);
         orderbook.add_order(order3, true);
-        orderbook.match_order(order3, order2);
+        orderbook.match_order(order3, order2, Side::Sell);
         assert_eq!(orderbook.trades.len(), 2);
         assert_eq!(orderbook.trades.get(&(3, 2)).unwrap().quantity, 50);
+        assert_eq!(orderbook.trades.get(&(3, 2)).unwrap().price, Price(100.0));
         assert_eq!(orderbook.buy_volume, 0);
         assert_eq!(orderbook.sell_volume, 0);
         assert_eq!(orderbook.bid_tree.len(), 2); // we have not cleaned the empty bids
@@ -363,7 +397,7 @@ mod tests {
         let order2 = Order::new(2, OrderType::GTC, 150, Price(100.0), Side::Sell);
         
         let result = orderbook.place_order(order1);
-        assert_eq!(result, false);
+        assert_eq!(result, true);
         let result = orderbook.place_order(order2);
         assert_eq!(result, true);
 
@@ -373,6 +407,6 @@ mod tests {
         assert_eq!(orderbook.buy_volume, 0);
         assert_eq!(orderbook.sell_volume, 50); 
         assert_eq!(orderbook.bid_tree.len(), 0);
-        assert_eq!(orderbook.ask_tree.len(), 0);
+        assert_eq!(orderbook.ask_tree.len(), 1);
     }
 }
